@@ -1,0 +1,24 @@
+<!--
+  Copyright (c) 2018-2020 ThunderSoft
+  All Rights Reserved by Thunder Software Technology Co., Ltd and its affiliates.
+  You may not use, copy, distribute, modify, transmit in any form this file
+  except in compliance with ThunderSoft in writing by applicable law.
+
+  @file   prebuilt_etc.xml
+  @brief   ncm
+  @details ncm permission config.
+  @version 1.0
+  @author  hemin0721
+  @date    2022-05-17
+
+  Edit History
+
+  DATE                     NAME               DESCRIPTION
+  2022-05-17               hemin0721          Create it.
+-->
+
+<permissions>
+    <privapp-permissions package="com.ts.car.ncm">
+        <permission name="android.permission.CONNECTIVITY_INTERNAL" />
+    </privapp-permissions>
+</permission>
