@@ -205,6 +205,7 @@ scanDirLI()中使用了ParallelPackageParser的对象，ParallelPackageParser是
 
 在 PackageParser 扫描完一个 APK 后，此时系统已经根据该 APK 中 AndroidManifest.xml，创建了一个完整的 Package 对象，
 下一步就是将该 Package 加入到系统中
+
 ```java
 class PMS {
     private void scanDirLI(File scanDir, int parseFlags, int scanFlags, long currentTime) {
@@ -560,6 +561,7 @@ class PMS {
     ...
         }
     }
+
     // 在 PackageParser 扫描完一个 APK 后，此时系统已经根据该 APK 中 AndroidManifest.xml，创建了一个完整的 Package 对象，
     // 下一步就是将该 Package 加入到系统中 此时调用的函数就是另外一个 scanPackageChildLI scanPackageChildLI()
     // 调用addForInitLI()在platform初始化时，把Package内容加入到内部数据结构
@@ -586,7 +588,7 @@ class PMS {
             return scanPackageChildLI(pkg, parseFlags, scanFlags, currentTime, user);
         }
     }
-    
+
     // 在addForInitLI()中，进行安装包校验、签名检查、apk更新等操作，把Package加入系统
     private PackageParser.Package addForInitLI(PackageParser.Package pkg,
                                                @ParseFlags int parseFlags, @ScanFlags int scanFlags, long currentTime,
@@ -641,11 +643,14 @@ class PMS {
 }
 
 ```
+
 按照core app >system app > other app 优先级扫描APK，解析AndroidManifest.xml文件，得到各个标签内容
 
-解析XML文件得到的信息由 Package 保存。从该类的成员变量可看出，和 Android 四大组件相关的信息分别由 activites、receivers、providers、services 保存。由于一个 APK 可声明多个组件，因此 activites 和 receivers等均声明为 ArrayList。
+解析XML文件得到的信息由 Package 保存。从该类的成员变量可看出，和 Android 四大组件相关的信息分别由
+activites、receivers、providers、services 保存。由于一个 APK 可声明多个组件，因此 activites 和 receivers等均声明为 ArrayList。
 
-在 PackageParser 扫描完一个 APK 后，此时系统已经根据该 APK 中 AndroidManifest.xml，创建了一个完整的 Package 对象，下一步就是将该 Package 加入到系统中
+在 PackageParser 扫描完一个 APK 后，此时系统已经根据该 APK 中 AndroidManifest.xml，创建了一个完整的 Package 对象，下一步就是将该
+Package 加入到系统中
 
 非系统 Package 扫描失败，删除文件
 
@@ -657,7 +662,8 @@ class PMS {
 [应用缓存](文件/55a4de06748e0484ef1f42b789cb5079d67ba1d3)
 
 Android开机性能的优化是每个手机项目的必须点.针对开机性能,Apk的扫描安装耗时是大头
-解决方案 通过更新时间戳来尽量减小重新生成cache的问题。 cacheFile.setLastModified(lastPackageFileTime + SystemClock.uptimeMillis());
+解决方案 通过更新时间戳来尽量减小重新生成cache的问题。 cacheFile.setLastModified(lastPackageFileTime +
+SystemClock.uptimeMillis());
 
 PKMS APK缓存机制
 PMS服务，启动以后制作缓存的时候，android系统时间还没同步，导致制作缓存文件的时候，缓存文件时间戳写入不正确。缓存文件时间戳是1900年.
@@ -693,7 +699,7 @@ class PackageParser {
             // update cachefile timestamp. 
             // The slow calibration of the system time will cause the cache mechanism to fail.
             long lastPackageFileTime = packageFile.lastModified();
-            if (cacheFile.lastModified() <=  lastPackageFileTime) {
+            if (cacheFile.lastModified() <= lastPackageFileTime) {
                 Slog.i(TAG, "updateFileTimestamp cache file:" + cacheFile);
                 cacheFile.setLastModified(lastPackageFileTime + SystemClock.uptimeMillis());
             }
@@ -1097,3 +1103,864 @@ dex 优化 检查是否需要去更新Packages并进行dex优化，如果没有O
 最终调用的是Installer的dexopt()进行优化
 磁盘维护 磁盘维护最终调用的是vold进程的 fstrim()进行清理操作 主要是执行磁盘清理工作，释放磁盘空间
 PKMS 准备就绪 systemReady主要完成的是默认授权和更新package的信息，通知在等待pms的一些组件
+
+## APK安装流程
+
+Android应用安装有如下四种方式：
+
+1)系统应用和预制应用安装――开机时完成，没有安装界面，在PKMS的构造函数中完成安装
+
+2)网络下载应用安装――通过应用商店应用完成，调用PackageManager.installPackages()，有安装界面。
+
+3)ADB工具安装――没有安装界面，它通过启动pm脚本的形式，然后调用com.android.commands.pm.Pm类，之后调用到PMS.installStage()
+完成安装。
+
+4)第三方应用安装――通过SD卡里的APK文件安装，有安装界面，由packageinstaller.apk应用处理安装及卸载过程的界面。
+
+上述几种方式均通过PackageInstallObserver来监听安装是否成功。
+
+生成的APK文件本质还是一个zip文件，只不过被Google强行修改了一下后缀名称而已。所以我们将APK的后缀修改成.zip就可以查看其包含的内容了。
+
+META-INF：关于签名的信息存放，应用安装验证签名的时候会验证该文件里面的信息
+-res：资源文件，是被编译过的。raw和图片是保持原样的，但是其他的文件会被编译成二进制文件。
+
+res：这里面的资源是不经过编译原样打包进来的
+
+AndroidManifest.xml：程序全局配置文件。该文件是每个应用程序都必须定义和包含的文件，它描述了应用程序的名字、版本、权限、引用的库文件等等信息。
+
+classes.dex：Dalvik字节码文件，Android会将所有的class文件全部放到这一个文件里。
+
+resources.arsc：编译后的二进制资源文件，保存资源文件的索引，由aapt生成
+
+lib: 如果存在的话，存放的是ndk编出来的so库
+
+APK打包器将DEX文件和已编译资源合并成单个APK。不过，必须先将APK签名，才能将应用安装并部署到Android设备上。
+
+APK打包器使用密钥签署APK：
+a. 如果构建的APK是debug版本，那么将使用调试密钥签名，Android会默认提供一个debug的密钥。
+b. 如果构建的是release版本，会使用发布版本的密钥签名。
+
+在生成最终的APK文件之前还会使用zipalign工具来优化文件。
+
+APK的安装过程
+
+1)将APK的信息通过IO流的形式写入到PackageInstaller.Session中。
+
+2)调用PackageInstaller.Session的commit方法，将APK的信息交由PKMS处理。
+
+3)拷贝APK
+
+4)最后进行安装
+
+涉及的Binder服务：
+
+1)PackageManager（抽象类）----IPackageManager------ PKMS
+(实现类：ApplicationPackageManager)
+
+2)PackageInstaller-----IPackageInstaller------PackageInstallerService
+(其中会调用IPackageInstaller对象调用PackageInstallerService中的接口)
+
+3)PackageInstaller.Session-----IPackageInstallerSession------ PackageInstallerSession
+(PackageInstaller.Session中有IPackageInstallerSession类型的成员变量，来调用 PackageInstallerSession的接口)
+
+![大概流程](Image/img_5.png)
+
+点击一个未安装的apk后，会弹出安装界面，点击点击确定按钮后，会进入 PackageInstallerActivity.java的 bindUi()中的mAlert点击事件
+
+点击apk后，弹出的安装界面底部显示的是一个diaglog，主要由bindUi构成，上面有”取消“和”安装“两个按钮，点击安装后
+调用startInstall()进行安装
+
+```java
+public class PackageInstallerActivity {
+    private void bindUi() {
+        mAlert.setIcon(mAppSnippet.icon);
+        mAlert.setTitle(mAppSnippet.label);
+        mAlert.setView(R.layout.install_content_view);
+        mAlert.setButton(DialogInterface.BUTTON_POSITIVE, getString(R.string.install),
+                (ignored, ignored2) -> {
+                    if (mOk.isEnabled()) {
+                        if (mSessionId != -1) {
+                            mInstaller.setPermissionsResult(mSessionId, true);
+                            finish();
+                        } else {
+                            startInstall(); // 进行APK安装
+                        }
+                    }
+                }, null);
+        mAlert.setButton(DialogInterface.BUTTON_NEGATIVE, getString(R.string.cancel),
+                (ignored, ignored2) -> {
+                    // Cancel and finish
+                    setResult(RESULT_CANCELED);
+                    if (mSessionId != -1) {
+                        mInstaller.setPermissionsResult(mSessionId, false);
+                    }
+                    finish();
+                }, null);
+        setupAlert();
+
+        mOk = mAlert.getButton(DialogInterface.BUTTON_POSITIVE);
+        mOk.setEnabled(false);
+    }
+
+    // startInstall方法组装了一个Intent，并跳转到 InstallInstalling 
+    // 这个Activity，并关闭掉当前的PackageInstallerActivity。
+    // InstallInstalling主要用于向包管理器发送包的信息并处理包管理的回调。
+    private void startInstall() {
+        // Start subactivity to actually install the application
+        Intent newIntent = new Intent();
+        newIntent.putExtra(PackageUtil.INTENT_ATTR_APPLICATION_INFO,
+                mPkgInfo.applicationInfo);
+        newIntent.setData(mPackageURI);
+        newIntent.setClass(this, InstallInstalling.class);  //设置Intent中的class为 InstallInstalling，用来进行Activity跳转
+        String installerPackageName = getIntent().getStringExtra(
+                Intent.EXTRA_INSTALLER_PACKAGE_NAME);
+        if (mOriginatingURI != null) {
+            newIntent.putExtra(Intent.EXTRA_ORIGINATING_URI, mOriginatingURI);
+        }
+        if (mReferrerURI != null) {
+            newIntent.putExtra(Intent.EXTRA_REFERRER, mReferrerURI);
+        }
+        if (mOriginatingUid != PackageInstaller.SessionParams.UID_UNKNOWN) {
+            newIntent.putExtra(Intent.EXTRA_ORIGINATING_UID, mOriginatingUid);
+        }
+        if (installerPackageName != null) {
+            newIntent.putExtra(Intent.EXTRA_INSTALLER_PACKAGE_NAME,
+                    installerPackageName);
+        }
+        if (getIntent().getBooleanExtra(Intent.EXTRA_RETURN_RESULT, false)) {
+            newIntent.putExtra(Intent.EXTRA_RETURN_RESULT, true);
+        }
+        newIntent.addFlags(Intent.FLAG_ACTIVITY_FORWARD_RESULT);
+        if (localLOGV) Log.i(TAG, "downloaded app uri=" + mPackageURI);
+        startActivity(newIntent); // start InstallInstalling Activity;
+        finish();
+    }
+}
+
+```
+
+InstallInstalling 的Activity启动后，进入onCreate
+
+主要分为6步：
+
+1.如果savedInstanceState不为null，获取此前保存的mSessionId和mInstallId，
+其中mSessionId是安装包的会话id，mInstallId是等待的安装事件id
+
+2.根据mInstallId向InstallEventReceiver注册一个观察者，launchFinishBasedOnResult会接收到安装事件的回调，无论安装成功或者失败都会关闭当前的Activity(
+InstallInstalling)。
+如果savedInstanceState为null，代码的逻辑也是类似的
+
+3.创建SessionParams，它用来代表安装会话的参数,组装params
+
+4.根据mPackageUri对包（APK）进行轻量级的解析，并将解析的参数赋值给SessionParams
+
+5.向InstallEventReceiver注册一个观察者返回一个新的mInstallId，其中InstallEventReceiver继承自BroadcastReceiver，用于接收安装事件并回调给EventResultPersister。
+
+6.PackageInstaller的createSession方法内部会通过IPackageInstaller与PackageInstallerService进行进程间通信，最终调用的是PackageInstallerService的createSession方法来创建并返回mSessionId
+
+```java
+/**
+ * Send package to the package manager and handle results from package manager. Once the
+ * installation succeeds, start {@link InstallSuccess} or {@link InstallFailed}.
+ * <p>This has two phases: First send the data to the package manager, then wait until the package
+ * manager processed the result.</p>
+ *
+ * 将包发送到包管理器并处理来自包管理器的结果。安装成功后，启动 {@link InstallSuccess} 或 {@link InstallFailed}。 <p>这有两个阶段：首先将数据发送到包管理器，然后等待包管理器处理结果
+ */
+public class InstallInstalling extends AlertActivity {
+    protected void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+
+        ApplicationInfo appInfo = getIntent()
+                .getParcelableExtra(PackageUtil.INTENT_ATTR_APPLICATION_INFO);
+        mPackageURI = getIntent().getData();
+
+        if ("package".equals(mPackageURI.getScheme())) {
+            try {
+                getPackageManager().installExistingPackage(appInfo.packageName);
+                launchSuccess();
+            } catch (PackageManager.NameNotFoundException e) {
+                launchFailure(PackageManager.INSTALL_FAILED_INTERNAL_ERROR, null);
+            }
+        } else {
+            //根据mPackageURI创建一个对应的File
+            final File sourceFile = new File(mPackageURI.getPath());
+            PackageUtil.AppSnippet as = PackageUtil.getAppSnippet(this, appInfo, sourceFile);
+
+            mAlert.setIcon(as.icon);
+            mAlert.setTitle(as.label);
+            mAlert.setView(R.layout.install_content_view);
+            mAlert.setButton(DialogInterface.BUTTON_NEGATIVE, getString(R.string.cancel),
+                    (ignored, ignored2) -> {
+                        if (mInstallingTask != null) {
+                            mInstallingTask.cancel(true);
+                        }
+
+                        if (mSessionId > 0) {
+                            getPackageManager().getPackageInstaller().abandonSession(mSessionId);
+                            mSessionId = 0;
+                        }
+
+                        setResult(RESULT_CANCELED);
+                        finish();
+                    }, null);
+            setupAlert();
+            requireViewById(R.id.installing).setVisibility(View.VISIBLE);
+
+            //1.如果savedInstanceState不为null，获取此前保存的mSessionId和mInstallId，其中mSessionId是安装包的会话id，mInstallId是等待的安装事件id
+            if (savedInstanceState != null) {
+                mSessionId = savedInstanceState.getInt(SESSION_ID);
+                mInstallId = savedInstanceState.getInt(INSTALL_ID);
+
+                // Reregister for result; might instantly call back if result was delivered while
+                // activity was destroyed
+                try {
+                    //2.根据mInstallId向InstallEventReceiver注册一个观察者，launchFinishBasedOnResult会接收到安装事件的回调，
+                    //无论安装成功或者失败都会关闭当前的Activity(InstallInstalling)。如果savedInstanceState为null，代码的逻辑也是类似的
+                    InstallEventReceiver.addObserver(this, mInstallId,
+                            this::launchFinishBasedOnResult);
+                } catch (EventResultPersister.OutOfIdsException e) {
+                    // Does not happen
+                }
+            } else {
+                //3.创建SessionParams，它用来代表安装会话的参数,组装params
+                PackageInstaller.SessionParams params = new PackageInstaller.SessionParams(
+                        PackageInstaller.SessionParams.MODE_FULL_INSTALL);
+                params.setInstallAsInstantApp(false);
+                params.setReferrerUri(getIntent().getParcelableExtra(Intent.EXTRA_REFERRER));
+                params.setOriginatingUri(getIntent()
+                        .getParcelableExtra(Intent.EXTRA_ORIGINATING_URI));
+                params.setOriginatingUid(getIntent().getIntExtra(Intent.EXTRA_ORIGINATING_UID,
+                        UID_UNKNOWN));
+                params.setInstallerPackageName(getIntent().getStringExtra(
+                        Intent.EXTRA_INSTALLER_PACKAGE_NAME));
+                params.setInstallReason(PackageManager.INSTALL_REASON_USER);
+
+                //4.根据mPackageUri对包（APK）进行轻量级的解析，并将解析的参数赋值给SessionParams
+                File file = new File(mPackageURI.getPath());
+                try {
+                    PackageParser.PackageLite pkg = PackageParser.parsePackageLite(file, 0);
+                    params.setAppPackageName(pkg.packageName);
+                    params.setInstallLocation(pkg.installLocation);
+                    params.setSize(
+                            PackageHelper.calculateInstalledSize(pkg, false, params.abiOverride));
+                } catch (PackageParser.PackageParserException e) {
+                    Log.e(LOG_TAG, "Cannot parse package " + file + ". Assuming defaults.");
+                    Log.e(LOG_TAG,
+                            "Cannot calculate installed size " + file + ". Try only apk size.");
+                    params.setSize(file.length());
+                } catch (IOException e) {
+                    Log.e(LOG_TAG,
+                            "Cannot calculate installed size " + file + ". Try only apk size.");
+                    params.setSize(file.length());
+                }
+
+                try {
+                    //5.向InstallEventReceiver注册一个观察者返回一个新的mInstallId，
+                    //其中InstallEventReceiver继承自BroadcastReceiver，用于接收安装事件并回调给EventResultPersister。
+                    mInstallId = InstallEventReceiver
+                            .addObserver(this, EventResultPersister.GENERATE_NEW_ID,
+                                    this::launchFinishBasedOnResult);
+                } catch (EventResultPersister.OutOfIdsException e) {
+                    launchFailure(PackageManager.INSTALL_FAILED_INTERNAL_ERROR, null);
+                }
+
+                try {
+                    //6.PackageInstaller的createSession方法内部会通过IPackageInstaller与PackageInstallerService进行进程间通信，
+                    //最终调用的是PackageInstallerService的createSession方法来创建并返回mSessionId
+                    mSessionId = getPackageManager().getPackageInstaller().createSession(params);
+                } catch (IOException e) {
+                    launchFailure(PackageManager.INSTALL_FAILED_INTERNAL_ERROR, null);
+                }
+            }
+
+            mCancelButton = mAlert.getButton(DialogInterface.BUTTON_NEGATIVE);
+
+            mSessionCallback = new InstallSessionCallback();
+        }
+    }
+
+    //  接着在InstallInstalling 的onResume方法中，调用onPostExecute()方法，
+    //  将APK的信息通过IO流的形式写入到PackageInstaller.Session中
+    @Override
+    protected void onResume() {
+        super.onResume();
+
+        // This is the first onResume in a single life of the activity
+        if (mInstallingTask == null) {
+            PackageInstaller installer = getPackageManager().getPackageInstaller();
+            PackageInstaller.SessionInfo sessionInfo = installer.getSessionInfo(mSessionId);
+
+            if (sessionInfo != null && !sessionInfo.isActive()) {
+                mInstallingTask = new InstallingAsyncTask();
+                mInstallingTask.execute();
+            } else {
+                // we will receive a broadcast when the install is finished
+                mCancelButton.setEnabled(false);
+                setFinishOnTouchOutside(false);
+            }
+        }
+    }
+
+    /**
+     * Send the package to the package installer and then register a event result observer that
+     * will call {@link #launchFinishBasedOnResult(int, int, String)}
+     *
+     * InstallingAsyncTask 的doInBackground()会根据包(APK)的Uri，
+     * 将APK的信息通过IO流的形式写入到PackageInstaller.Session中
+     *
+     */
+    private final class InstallingAsyncTask extends AsyncTask<Void, Void,
+            PackageInstaller.Session> {
+        volatile boolean isDone;
+
+        @Override
+        protected PackageInstaller.Session doInBackground(Void... params) {
+            PackageInstaller.Session session;
+            try {
+                session = getPackageManager().getPackageInstaller().openSession(mSessionId);
+            } catch (IOException e) {
+                return null;
+            }
+
+            session.setStagingProgress(0);
+
+            try {
+                File file = new File(mPackageURI.getPath());
+
+                try (InputStream in = new FileInputStream(file)) {
+                    long sizeBytes = file.length();
+                    try (OutputStream out = session
+                            .openWrite("PackageInstaller", 0, sizeBytes)) {
+                        byte[] buffer = new byte[1024 * 1024];
+                        while (true) {
+                            int numRead = in.read(buffer);
+
+                            if (numRead == -1) {
+                                session.fsync(out);
+                                break;
+                            }
+
+                            if (isCancelled()) {
+                                session.close();
+                                break;
+                            }
+                            // 将APK的信息通过IO流的形式写入到PackageInstaller.Session中
+                            out.write(buffer, 0, numRead);
+                            if (sizeBytes > 0) {
+                                float fraction = ((float) numRead / (float) sizeBytes);
+                                session.addProgress(fraction);
+                            }
+                        }
+                    }
+                }
+
+                return session;
+            } catch (IOException | SecurityException e) {
+                Log.e(LOG_TAG, "Could not write package", e);
+
+                session.close();
+
+                return null;
+            } finally {
+                synchronized (this) {
+                    isDone = true;
+                    notifyAll();
+                }
+            }
+        }
+
+        @Override
+        protected void onPostExecute(PackageInstaller.Session session) {
+            if (session != null) {
+                Intent broadcastIntent = new Intent(BROADCAST_ACTION);
+                broadcastIntent.setFlags(Intent.FLAG_RECEIVER_FOREGROUND);
+                broadcastIntent.setPackage(getPackageName());
+                broadcastIntent.putExtra(EventResultPersister.EXTRA_ID, mInstallId);
+
+                PendingIntent pendingIntent = PendingIntent.getBroadcast(
+                        InstallInstalling.this,
+                        mInstallId,
+                        broadcastIntent,
+                        PendingIntent.FLAG_UPDATE_CURRENT);
+                // 调用PackageInstaller.Session的commit方法，进行安装
+                session.commit(pendingIntent.getIntentSender());
+                mCancelButton.setEnabled(false);
+                setFinishOnTouchOutside(false);
+            } else {
+                getPackageManager().getPackageInstaller().abandonSession(mSessionId);
+
+                if (!isCancelled()) {
+                    launchFailure(PackageManager.INSTALL_FAILED_INVALID_APK, null);
+                }
+            }
+        }
+    }
+
+}
+
+```
+
+接下来看一看PackageInstaller的commit()
+Session : 会话
+
+```java
+/**
+ * Offers the ability to install, upgrade, and remove applications on the
+ * device. This includes support for apps packaged either as a single
+ * "monolithic" APK, or apps packaged as multiple "split" APKs.
+ **/
+public class PackageInstaller {
+    /**
+     * Attempt to commit everything staged in this session. This may require
+     * user intervention, and so it may not happen immediately. The final
+     * result of the commit will be reported through the given callback.
+     * <p>
+     * Once this method is called, the session is sealed and no additional
+     * mutations may be performed on the session. If the device reboots
+     * before the session has been finalized, you may commit the session again.
+     * <p>
+     * If the installer is the device owner or the affiliated profile owner, there will be no
+     * user intervention.
+     *
+     * @param statusReceiver Called when the state of the session changes. Intents
+     *                       sent to this receiver contain {@link #EXTRA_STATUS}. Refer to the
+     *                       individual status codes on how to handle them.
+     *
+     * @throws SecurityException if streams opened through
+     *             {@link #openWrite(String, long, long)} are still open.
+     *
+     * @see android.app.admin.DevicePolicyManager
+     */
+    public void commit(@NonNull IntentSender statusReceiver) {
+        try {
+            //调用PackageInstallerSession的commit方法,进入到java框架层
+            mSession.commit(statusReceiver, false);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+}
+```
+
+这里提到的Session是什么？
+Session : 会话
+
+```java
+interface IPackageInstallerSession {
+    void setClientProgress(float progress);
+
+    void addClientProgress(float progress);
+
+    String[] getNames();
+
+    ParcelFileDescriptor openWrite(String name, long offsetBytes, long lengthBytes);
+
+    ParcelFileDescriptor openRead(String name);
+
+    void write(String name, long offsetBytes, long lengthBytes, in ParcelFileDescriptor fd);
+
+    void removeSplit(String splitName);
+
+    void close();
+
+    void commit(in IntentSender statusReceiver, boolean forTransferred);
+
+    void transfer(in String packageName);
+
+    void abandon();
+
+    boolean isMultiPackage();
+
+    int[] getChildSessionIds();
+
+    void addChildSessionId(in int sessionId);
+
+    void removeChildSessionId(in int sessionId);
+
+    int getParentSessionId();
+
+    boolean isStaged();
+}
+```
+
+commit()中 mSession的类型为IPackageInstallerSession，这说明要通过IPackageInstallerSession来进行进程间的通信，
+最终会调用PackageInstallerSession的commit方法，这样代码逻辑就到了Java框架层的。
+
+```java
+public class PackageInstallerSession extends IPackageInstallerSession.Stub {
+    @Override
+    public void commit(@NonNull IntentSender statusReceiver, boolean forTransfer) {
+        if (mIsPerfLockAcquired && mPerfBoostInstall != null) {
+            mPerfBoostInstall.perfLockRelease();
+            mIsPerfLockAcquired = false;
+        }
+        if (hasParentSessionId()) {
+            throw new IllegalStateException(
+                    "Session " + sessionId + " is a child of multi-package session "
+                            + mParentSessionId + " and may not be committed directly.");
+        }
+        // 调用markAsCommitted() markAsCommitted方法中会将包的信息封装为 PackageInstallObserverAdapter ，
+        // 它在PKMS中被定义,然后返回到commit()中，向Handler发送一个类型为MSG_COMMIT的消息
+        if (!markAsCommitted(statusReceiver, forTransfer)) {
+            return;
+        }
+        if (isMultiPackage()) {
+            final SparseIntArray remainingSessions = mChildSessionIds.clone();
+            final IntentSender childIntentSender =
+                    new ChildStatusIntentReceiver(remainingSessions, statusReceiver)
+                            .getIntentSender();
+            RuntimeException commitException = null;
+            boolean commitFailed = false;
+            for (int i = mChildSessionIds.size() - 1; i >= 0; --i) {
+                final int childSessionId = mChildSessionIds.keyAt(i);
+                try {
+                    // commit all children, regardless if any of them fail; we'll throw/return
+                    // as appropriate once all children have been processed
+                    if (!mSessionProvider.getSession(childSessionId)
+                            .markAsCommitted(childIntentSender, forTransfer)) {
+                        commitFailed = true;
+                    }
+                } catch (RuntimeException e) {
+                    commitException = e;
+                }
+            }
+            if (commitException != null) {
+                throw commitException;
+            }
+            if (commitFailed) {
+                return;
+            }
+        }
+        mHandler.obtainMessage(MSG_COMMIT).sendToTarget();
+    }
+
+    // markAsCommitted方法中会将包的信息封装为 PackageInstallObserverAdapter 
+    // 它在PKMS中被定义,然后返回到commit()中，向Handler发送一个类型为MSG_COMMIT的消息
+    public boolean markAsCommitted(
+            @NonNull IntentSender statusReceiver, boolean forTransfer) {
+        Preconditions.checkNotNull(statusReceiver);
+
+        List<PackageInstallerSession> childSessions = getChildSessions();
+
+        final boolean wasSealed;
+        synchronized (mLock) {
+            assertCallerIsOwnerOrRootLocked();
+            assertPreparedAndNotDestroyedLocked("commit");
+
+            final PackageInstallObserverAdapter adapter = new PackageInstallObserverAdapter(
+                    mContext, statusReceiver, sessionId,
+                    isInstallerDeviceOwnerOrAffiliatedProfileOwnerLocked(), userId);
+            mRemoteObserver = adapter.getBinder();
+
+            return true;
+        }
+    }
+
+    // MSG_COMMIT在handler中进行处理，进入handleCommit()
+    public boolean handleMessage(Message msg) {
+        switch (msg.what) {
+            case MSG_COMMIT:
+                handleCommit();
+                break;
+        }
+    }
+
+    private void handleCommit() {
+        List<PackageInstallerSession> childSessions = getChildSessions();
+
+        try {
+            synchronized (mLock) {
+                //最终调用installStage()，进入PKMS
+                commitNonStagedLocked(childSessions);
+            }
+        } catch (PackageManagerException e) {
+            final String completeMsg = ExceptionUtils.getCompleteMessage(e);
+            Slog.e(TAG, "Commit of session " + sessionId + " failed: " + completeMsg);
+            destroyInternal();
+            dispatchSessionFinished(e.error, completeMsg, null);
+        }
+    }
+
+    //  commitNonStagedLocked()中首先 调用了PackageInstallObserver的 
+    //  onPackageInstalled方法，将 Complete 方法出现的PackageManagerException的异常信息回调给
+    //  PackageInstallObserverAdapter。
+    //  最终调用installStage()，进入PKMS
+
+    private void commitNonStagedLocked(List<PackageInstallerSession> childSessions)
+            throws PackageManagerException {
+        if (isMultiPackage()) {
+        ...
+            if (!success) {
+                try {
+                    mRemoteObserver.onPackageInstalled(
+                            null, failure.error, failure.getLocalizedMessage(), null);
+                } catch (RemoteException ignored) {
+                }
+                return;
+            }
+            mPm.installStage(activeChildSessions);
+        } else {
+            mPm.installStage(committingSession);
+        }
+    }
+
+    // 进入PKMS的installStage()
+
+    void installStage(ActiveInstallSession activeInstallSession) {
+        if (DEBUG_INSTANT) {
+            if ((activeInstallSession.getSessionParams().installFlags
+                    & PackageManager.INSTALL_INSTANT_APP) != 0) {
+                Slog.d(TAG, "Ephemeral install of " + activeInstallSession.getPackageName());
+            }
+        }
+        //1.创建了类型为INIT_COPY的消息
+        final Message msg = mHandler.obtainMessage(INIT_COPY);
+
+        //2.创建InstallParams，它对应于包的安装数据
+        final InstallParams params = new InstallParams(activeInstallSession);
+        params.setTraceMethod("installStage").setTraceCookie(System.identityHashCode(params));
+        msg.obj = params;
+
+        Trace.asyncTraceBegin(TRACE_TAG_PACKAGE_MANAGER, "installStage",
+                System.identityHashCode(msg.obj));
+        Trace.asyncTraceBegin(TRACE_TAG_PACKAGE_MANAGER, "queueInstall",
+                System.identityHashCode(msg.obj));
+
+        //3.将InstallParams通过消息发送出去。
+        mHandler.sendMessage(msg);
+    }
+
+    // 对INIT_COPY的消息的处理
+    void doHandleMessage(Message msg) {
+        switch (msg.what) {
+            case INIT_COPY: {
+                HandlerParams params = (HandlerParams) msg.obj;
+                if (params != null) {
+                    if (DEBUG_INSTALL) Slog.i(TAG, "init_copy: " + params);
+                    Trace.asyncTraceEnd(TRACE_TAG_PACKAGE_MANAGER, "queueInstall",
+                            System.identityHashCode(params));
+                    Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "startCopy");
+                    //执行APK拷贝动作
+                    params.startCopy();
+                    Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
+                }
+                break;
+            }
+        }
+    }
+
+    // handleStartCopy()需要执行下面几步：
+    // 1.首先检查文件和cid是否已生成，如生成则设置installFlags。
+    // 2.检查空间大小，如果空间不够则释放无用空间。
+    // 3.覆盖原有安装位置的文件，并根据返回结果来确定函数的返回值，并设置installFlags
+    //4.确定是否有任何已安装的包验证器，如有，则延迟检测。
+    // 主要分三步：首先新建一个验证Intent，然后设置相关的信息，之后获取验证器列表，最后向每个验证器发送验证Intent。
+    public void handleStartCopy() {
+        //1.首先检查文件和cid是否已生成，如生成则设置installFlags。
+        if (origin.staged) {
+            if (origin.file != null) {
+                installFlags |= PackageManager.INSTALL_INTERNAL;
+            } else {
+                throw new IllegalStateException("Invalid stage location");
+            }
+        }
+    ...
+        //2.检查空间大小，如果空间不够则释放无用空间。
+        if (!origin.staged && pkgLite.recommendedInstallLocation
+                == PackageHelper.RECOMMEND_FAILED_INSUFFICIENT_STORAGE) {
+            // TODO: focus freeing disk space on the target device
+            final StorageManager storage = StorageManager.from(mContext);
+            final long lowThreshold = storage.getStorageLowBytes(
+                    Environment.getDataDirectory());
+
+            final long sizeBytes = PackageManagerServiceUtils.calculateInstalledSize(
+                    origin.resolvedPath, packageAbiOverride);
+            if (sizeBytes >= 0) {
+                try {
+                    mInstaller.freeCache(null, sizeBytes + lowThreshold, 0, 0);
+                    pkgLite = PackageManagerServiceUtils.getMinimalPackageInfo(mContext,
+                            origin.resolvedPath, installFlags, packageAbiOverride);
+                } catch (InstallerException e) {
+                    Slog.w(TAG, "Failed to free cache", e);
+                }
+            }
+            if (pkgLite.recommendedInstallLocation
+                    == PackageHelper.RECOMMEND_FAILED_INVALID_URI) {
+                pkgLite.recommendedInstallLocation
+                        = PackageHelper.RECOMMEND_FAILED_INSUFFICIENT_STORAGE;
+            }
+        }
+ 
+    ...
+        //3.覆盖原有安装位置的文件，并根据返回结果来确定函数的返回值，并设置installFlags。
+        {
+            // Override with defaults if needed.
+            loc = installLocationPolicy(pkgLite);
+            if (loc == PackageHelper.RECOMMEND_FAILED_VERSION_DOWNGRADE) {
+                ret = PackageManager.INSTALL_FAILED_VERSION_DOWNGRADE;
+            } else if (loc == PackageHelper.RECOMMEND_FAILED_WRONG_INSTALLED_VERSION) {
+                ret = PackageManager.INSTALL_FAILED_WRONG_INSTALLED_VERSION;
+            } else if (!onInt) {
+                // Override install location with flags
+                if (loc == PackageHelper.RECOMMEND_INSTALL_EXTERNAL) {
+                    // Set the flag to install on external media.
+                    installFlags &= ~PackageManager.INSTALL_INTERNAL;
+                } else if (loc == PackageHelper.RECOMMEND_INSTALL_EPHEMERAL) {
+                    if (DEBUG_INSTANT) {
+                        Slog.v(TAG, "...setting INSTALL_EPHEMERAL install flag");
+                    }
+                    installFlags |= PackageManager.INSTALL_INSTANT_APP;
+                    installFlags &= ~PackageManager.INSTALL_INTERNAL;
+                } else {
+                    // Make sure the flag for installing on external
+                    // media is unset
+                    installFlags |= PackageManager.INSTALL_INTERNAL;
+                }
+            }
+        }
+    ...
+        //4.确定是否有任何已安装的包验证器，如有，则延迟检测。主要分三步：首先新建一个验证Intent，然后设置相关的信息，之后获取验证器列表，最后向每个验证器发送验证Intent。
+        //4.1构造验证Intent
+        final Intent verification = new Intent(
+                Intent.ACTION_PACKAGE_NEEDS_VERIFICATION);
+        verification.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
+        verification.setDataAndType(Uri.fromFile(new File(origin.resolvedPath)),
+                PACKAGE_MIME_TYPE);
+        verification.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+
+        final PackageVerificationState verificationState = new PackageVerificationState(
+                requiredUid, this);
+
+        mPendingVerification.append(verificationId, verificationState);
+        //4.2获取验证器列表
+        final List<ComponentName> sufficientVerifiers = matchVerifiers(pkgLite,
+                receivers, verificationState);
+
+        DeviceIdleController.LocalService idleController = getDeviceIdleController();
+        final long idleDuration = getVerificationTimeout();
+
+        if (sufficientVerifiers != null) {
+            final int N = sufficientVerifiers.size();
+            if (N == 0) {
+                Slog.i(TAG, "Additional verifiers required, but none installed.");
+                ret = PackageManager.INSTALL_FAILED_VERIFICATION_FAILURE;
+            } else {
+                for (int i = 0; i < N; i++) {
+                    final ComponentName verifierComponent = sufficientVerifiers.get(i);
+                    idleController.addPowerSaveTempWhitelistApp(Process.myUid(),
+                            verifierComponent.getPackageName(), idleDuration,
+                            verifierUser.getIdentifier(), false, "package verifier");
+                    //4.3向每个验证器发送验证Intent
+                    final Intent sufficientIntent = new Intent(verification);
+                    sufficientIntent.setComponent(verifierComponent);
+                    mContext.sendBroadcastAsUser(sufficientIntent, verifierUser);
+                }
+            }
+        }
+    ...
+    }
+
+    // 向验证器客户端发送intent，只有当验证成功之后才会开启copy工作。如果没有任何验证器则直接拷贝。
+    // 在handleReturnCode()中调用 copyApk()进行APK的拷贝动作
+    void handleReturnCode() {
+        if (mVerificationCompleted && mEnableRollbackCompleted) {
+            if ((installFlags & PackageManager.INSTALL_DRY_RUN) != 0) {
+                String packageName = "";
+                try {
+                    PackageLite packageInfo =
+                            new PackageParser().parsePackageLite(origin.file, 0);
+                    packageName = packageInfo.packageName;
+                } catch (PackageParserException e) {
+                    Slog.e(TAG, "Can't parse package at " + origin.file.getAbsolutePath(), e);
+                }
+                try {
+                    observer.onPackageInstalled(packageName, mRet, "Dry run", new Bundle());
+                } catch (RemoteException e) {
+                    Slog.i(TAG, "Observer no longer exists.");
+                }
+                return;
+            }
+            if (mRet == PackageManager.INSTALL_SUCCEEDED) {
+                mRet = mArgs.copyApk();
+            }
+            processPendingInstall(mArgs, mRet);
+        }
+    }
+}
+```
+
+APK 拷贝调用栈如下：
+![APK 拷贝流程](Image/img_6.png)
+通过文件流的操作，把APK拷贝到/data/app等目录
+
+```java
+public class PackageManagerUtils {
+    private static void copyFile(String sourcePath, File targetDir, String targetName)
+            throws ErrnoException, IOException {
+        if (!FileUtils.isValidExtFilename(targetName)) {
+            throw new IllegalArgumentException("Invalid filename: " + targetName);
+        }
+        Slog.d(TAG, "Copying " + sourcePath + " to " + targetName);
+
+        final File targetFile = new File(targetDir, targetName);
+        final FileDescriptor targetFd = Os.open(targetFile.getAbsolutePath(),
+                O_RDWR | O_CREAT, 0644);
+        Os.chmod(targetFile.getAbsolutePath(), 0644);
+        FileInputStream source = null;
+        try {
+            source = new FileInputStream(sourcePath);
+            FileUtils.copy(source.getFD(), targetFd);
+        } finally {
+            IoUtils.closeQuietly(source);
+        }
+    }
+}
+
+```
+
+APK拷贝完成后，进入真正的安装，流程如下：
+
+![APK 安装流程](Image/img_7.png)
+
+```java
+public class PKMS {
+    private void installPackagesLI(List<InstallRequest> requests) {
+    ...
+        //1.Prepare 准备：分析任何当前安装状态，分析包并对其进行初始验证。
+        prepareResult = preparePackageLI(request.args, request.installResult);
+    ...
+        //2.Scan  扫描：考虑到prepare中收集的上下文，询问已分析的包。
+        final List<ScanResult> scanResults = scanPackageTracedLI(
+                prepareResult.packageToScan, prepareResult.parseFlags,
+                prepareResult.scanFlags, System.currentTimeMillis(),
+                request.args.user);
+    ...
+        //3.Reconcile 调和：在彼此的上下文和当前系统状态中验证扫描的包，以确保安装成功。
+        ReconcileRequest reconcileRequest = new ReconcileRequest(preparedScans, installArgs,
+                installResults,
+                prepareResults,
+                mSharedLibraries,
+                Collections.unmodifiableMap(mPackages), versionInfos,
+                lastStaticSharedLibSettings);
+    ...
+        //4.Commit 提交：提交所有扫描的包并更新系统状态。这是安装流中唯一可以修改系统状态的地方，必须在此阶段之前确定所有可预测的错误。
+        commitPackagesLocked(commitRequest);
+    ...
+        //5.完成APK的安装
+        executePostCommitSteps(commitRequest);
+    }
+}
+```
+
+总结
+APK的安装主要分为以下4步：
+
+1)将APK的信息通过IO流的形式写入到PackageInstaller.Session中。
+
+2)调用PackageInstaller.Session的commit方法，将APK的信息交由PKMS处理。
+
+3)拷贝APK
+
+4)最后进行安装
