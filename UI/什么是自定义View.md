@@ -111,3 +111,13 @@ ParentSize 为父容器中目前可使用的大小 对于应用层View 其Measur
 3 当View的宽高为Warp_content时 不管父容器的模式时精准还是最大化 view的模式总是最大化并且大小不会超过父容器的宽高
 4 当view为unspecified模式 这个模式主要用于系统多出measure的清空 一般不需要关注 
 
+ViewGroup为什么不会执行onDraw()
+
+View.draw(canvas) (DecorView)
+onDraw(canvas)
+dispatchDraw(canvas) (ViewGroup.dispatchDraw)
+drawChild view.draw(Canvas canvas, ViewGroup parent long drawingTime)
+- renderNode = updateDisplayListIfDirty()
+dispatchDraw()
+  
+会递归调用到子view的onDraw()
