@@ -57,6 +57,38 @@ public class PhotoView extends View {
     }
 
     public boolean onTouchEvent(MotionEvent event) {
+
+        // 实现最后一根按下的手指实现move事件
+        switch (event.getAction()) {// 多指操作 getActionMasked();
+            case MotionEvent.ACTION_DOWN:
+                downX = event.getX();
+                downY = event.getY();
+                break;
+            case MotionEvent.ACTION_MOVE:
+                // id 对应的index值 index 不一定 == id index 会变化 id不会变化
+                int index = event.findPointerIndex(currentPointID);
+                offsetX = lastOffsetX + event.getX() - downX; // getX(index) 
+                offsetY = lastOffsetY + event.getY() - downY;
+                invalidate();
+                break;
+            case MotionEvent.ACTION_UP:
+                // 记录上次抬手的偏移值
+                lastOffsetX = offsetX;
+                lastOffsetY = offsetY;
+                break;
+                
+            case MotionEvent.ACTION_POINT_DOWN:
+                // 多指操作  非第一根手指触发
+                // 获取index值
+                int actionIndex = event.getActionIndex();
+                currentPointerID = event.getPointerID(actionIndex);
+                break;            
+                case MotionEvent.ACTION_POINT_UP:
+                // 多指操作 非最后一根触发
+                break;
+        }
+
+
         return gestureDetector.onTouchEvent();
     }
 
@@ -202,4 +234,5 @@ public class PhotoView extends View {
 
 }
 ```
+
 ![效果](Image/img_16.png)
