@@ -22,6 +22,8 @@ mItemDecorations.get(i).onDraw() --> dispatchDraw(canvas);（绘制ItemView）
 --》 mItemDecorations.get(i).onDrawOver
 
 
+
+
 ## 复用原理分析
 复用的入口
 嵌套滑动 --》 RecyclerView   
@@ -125,6 +127,9 @@ ArrayList<ViewHolder> scrapHeap --》 DEFAULT_MAX_SCRAP = 5 --> setMaxRecycledVi
 从 CacheView  复用: 不用调用 onBindViewHolder
 从缓存中没有拿到 ViewHolder： onCreate onBind
 
+## 总结
+![缓存与复用](Image/缓存与复用.png)
+
 ## 使用
 ```java
 import android.os.Bundle;
@@ -210,4 +215,11 @@ public class CustomAdapter extends RecyclerView.Adapter<CustomAdapter.CustomView
 }
 
 ```
+
+## 自定义Recycle的 LayoutManager 
+
+
+效果
+
+
 
