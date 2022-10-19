@@ -28,7 +28,6 @@ public class AppOnForegroundUtil {
     }
 
     public boolean isAppOnForeground(String packageName) {
-        LogUtil.debug("isAppOnForeground ： packageName: " + packageName);
         //Get all running apps in Android device
         List<ActivityManager.RunningAppProcessInfo> appProcesses = mActivityManager
                 .getRunningAppProcesses();
@@ -41,7 +40,6 @@ public class AppOnForegroundUtil {
                     && appProcess.importance
                     == ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
                     && isActivityToForeground(packageName)) {
-                LogUtil.debug("isAppOnForeground ： return true");
                 return true;
             }
         }
@@ -54,7 +52,6 @@ public class AppOnForegroundUtil {
         if (!tasks.isEmpty()) {
             ComponentName topActivity = tasks.get(0).topActivity;
             if (topActivity.getPackageName().equals(packageName)) {
-                LogUtil.debug("isApplicationBroughtToBackground ：packageName: " + packageName);
                 return true;
             }
         }
