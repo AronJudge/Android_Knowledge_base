@@ -1,0 +1,36 @@
+谷歌官方推的Jetpack框架也已经有很长一段时间了，基本上新开的项目都会使用MVVM + kotlin + 协程的架构去搭建一些新的项目或者重构，因此面试中AAC框架在面试或多或少会提到，
+本篇主要是对几个常用框架进行高度概括，具体需要自行结合源码查阅
+
+Lifecycle
+功能：抽离Activity生命周期，提供API进行监听（观察者模式），使用状态模式保存了当前的状态以及前后两步的事件
+注意点：非线程安全，在主线程调用
+源码实现：在ComponentActivity会注入一个ReportFragment，里面会对生命周期进行分发（类似Glide）
+注解（OnLifecycleEvent）使用原理：
+
+常见面试题
+
+MVP和MVVM优势和劣势
+
+
+MVP：从MVC中演化，进行解耦，和View层分离，减少Activity的负担；但是MVP会产生大量的接口和类文件；生命周期需要自己管理；View和P层耦合度较高，常常需要配合改动
+
+MVVM：M层完全关注于数据；更加的低耦合，VM不持有View相关，而且很多业务逻辑可以放在VM层复用；但是Databinding会导致XML文件难以复用并且难以Debug
+
+最大的区别是在MVP中,P和V层是互相持有的，而在MVVM中，VM是不持有View，不再依赖View层，而是通过观察者模式观察数据变化（LiveData、DataBinding等）
+
+ViewModel保存在Application和ViewModelScope的区别
+
+生命周期的区别，一个是应用的生命周期一个是lifecycle的生命周期
+
+
+ViewModel如何保证Activity销毁后保存数据
+
+在Activity被销毁的时候，AMS会通过远程Binder调用 retainNonConfigurationInstances 方法，
+这个方法会调用onRetainNonConfigurationInstance 、 getLastNonConfigurationInstance 保存一些配置，
+其中就包括 ViewModelStore ，在重新创建Activity时，AMS会通过 AMS#attach 将这个实例重新赋值
+
+首先MVVM是一种架构模式，在安卓开发中，谷歌为我们提供了一套jetpack框架用于快速实现MVVM（LiveData、Databinding、ViewModel），
+其中里面为我们处理了很多生命周期相关的重复性工作，消除了大量的重复代码
+
+AAC框架里面的核心我认为是Lifecycle，以Activity为例，是通过注入一个无UI的fragment，获取到生命周期的事件，
+再在里面维护了一个状态机，而且LiveData、ViewModel等的生命周期感知能力都是通过Lifecycle维护的这个状态去控制的

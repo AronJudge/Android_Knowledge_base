@@ -1,7 +1,8 @@
 AppCompatActivity Compat  : 兼容性 AppCompatDelegate Delegate : 委托
 
 我们先看一个有趣的事情，在我们使用theme为AppCompat或MaterialComponents的时候使用xml进行布局，
-就会发现我们使用的安卓原生自带控件会被以AppCompat或MaterialComponents的样式进行替换。而使用代码进行添加的就不会。 AppCompatActivity 从Android 21之后引入Material
+就会发现我们使用的安卓原生自带控件会被以AppCompat或MaterialComponents的样式进行替换。而使用代码进行添加的就不会。 
+AppCompatActivity 从Android 21之后引入Material
 Design的设计方式， 为了支持Material Color 、调色板、toolbar等各种新特性，AppCompatActivity就应用而生。
 
 AS 继承AppCompatActivity 可以看到在界面最上面会出现一个ActionBar, AppCompatActivity是用来替代ActionBarActivity的
@@ -425,9 +426,15 @@ ToggleButton
 
 总结
 首先AppCompatActivity将自己的生命周期委托给AppCompatDelegate
+
 AppCompatDelegate的实现类AppCompatDelegateImpl实现LayoutInfaler.Factory2接口
+
 给当前context的LayoutInfalter设定Factory2工厂
+
 LayoutInfalter.infalte方法调用Factory2#onCreateView
+
 Factory2#onCreateView间接调用AppCompatViewInflater#createView
+
 AppCompatViewInflater对象来自AppCompatTheme的viewInflaterClass属性
+
 AppCompatViewInflater#createView方法会通过name对控件进行创建
