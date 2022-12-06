@@ -88,7 +88,9 @@ var flAngleSize = style.getFloat(R.styleable.FlowLayoutStyle_flAngleSize, 10f)
 
 ![自定义属性](Image/img_8.png)
 
-3 自定义view流程 测量自己 4 onDraw 5 交互
+3. 自定义view流程 测量自己
+4. onDraw 
+5. 交互
 
 ```java
 import javax.swing.*;
@@ -224,6 +226,7 @@ public class ColorTrackTextView extends AppCompatTextView {
 ## 流式布局 自定义ViewGroup
 
 1. 自定义属性
+
 2. xml的使用
 3. 测量 先测量子view 根据子view测量自己 保存大小 尺寸 给onLayout用
 4. onLayout 根据自己的业务逻辑 进行child的绘制
