@@ -142,7 +142,7 @@ CountDownLatch 两种解决场景
 
 ```java
 /**
- * A synchronization aid that allows one or more threads to wait until
+ * Audio.md synchronization aid that allows one or more threads to wait until
  * a set of operations being performed in other threads completes.
  *
  * @since 1.5
