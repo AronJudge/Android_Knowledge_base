@@ -200,4 +200,67 @@ y = ((y0 · cosθ + x0 · sinθ) + 100) · 0.5
 
 ## Android 图形处理 —— Matirx 方法详解及应用场景
 
-## 
+![Matrix](Image/img_23.png)
+
+数值操作
+
+void set(Matrix src)
+
+深拷贝一份 src 中的数据到当前 Matrix 中, 如果 src 为 null, 则相当于 reset
+
+void reset()
+
+将当前 Matrix 重置成一个单位矩阵
+
+void setValues(float[] values)
+
+将一组浮点数值的前 9 位数据拷贝到 Matrix 中，如果数组长度小于 9，调用该方法会抛出异常
+
+void getValues(float[] values)
+
+从 Matrix 中拷贝数据到 values 浮点数组中
+
+数值计算
+
+void mapPoints(float[] dst, float[] src)
+把当前 Matrix 应用到 src 所指示的所有坐标上，然后将变换后的坐标复制到 dst 数组上
+数组中每两个相邻的点表示一个坐标（x,y），因此数组长度一般都是偶数，否则最后一个数值不参与计算
+
+
+float mapRadius(float radius)
+把当前 Matrix 应用到半径为 radius 所指示的圆上，然后返回变换之后的圆的半径，由于圆可能会因为画布变换变成椭圆，所以此处测量的是平均半径
+
+boolean mapRect(RectF dst, RectF src)
+和 mapPoints 类似，把当前 Matrix 应用到 src 所指示的四个顶点上，然后将变换后的四个顶点值写入 dst 中，返回值是判断矩形经过变换后是否仍为矩形
+
+
+设置
+setRotates、setScale、setSkew、setTranslate
+这几个方法比较好理解，就是将变换设置给当前 Matrix，得到一个变换后的 Matrix
+
+
+boolean setConcat(Matrix a, Matrix b)
+相当于计算两个矩阵相乘 a × b，并将结果赋值给当前矩阵，即 c.setConcat(a, b) 表示 c = a × b
+
+前乘后乘
+这两类计算也比较好理解，就是对应了数学中的矩阵前乘和后乘
+
+特殊方法
+boolean setPolyToPoly
+boolean setPolyToPoly (
+float[] src, 	// 原始顶点数组 src [x, y]
+int srcIndex, 	// 原始顶点数组开始位置
+float[] dst, 	// 目标顶点数组 dst [x, y]
+int dstIndex, 	// 目标顶点数组开始位置
+int pointCount)	// 测控顶点的数量 取值范围是: 0 到 4
+
+
+Poly 全称是 Polygon，多边形的意思。
+调用这个方法后，会计算从原始顶点和到目标顶点的变换（意味着 src 和 dst 要一一对应），把这种变换信息存储到当前 Matrix 中；将得到 的 Matrix 应用到任意图形上，可以实现把这个图形进行 Matrix 所表示的形状变换，效果如下图所示
+
+Matrix 在 Android 中的使用场景
+
+其实我们日常开发中或多或少已经接触了 Matrix，只是大部分我们都还不知道，比如我们使用的 ImageView 的 ScaleType，
+实际上内部就是通过 Matrix 实现的
+
+![Matrix](Image/img_24.png)
