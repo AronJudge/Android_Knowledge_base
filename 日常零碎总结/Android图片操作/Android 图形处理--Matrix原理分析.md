@@ -264,3 +264,40 @@ Matrix 在 Android 中的使用场景
 实际上内部就是通过 Matrix 实现的
 
 ![Matrix](Image/img_24.png)
+
+
+Matrix常用的方法：
+
+（一）变换方法：
+
+     Matrix提供了translate(平移)、rotate(旋转)、scale(缩放)、skew(倾斜)四种操作，这四种操作的内部实现过程都是通过matrix.setValues(…)来设置矩阵的值来达到变换图片的效果。
+     Matrix的每种操作都有set、pre、post三种操作，set是清空队列再添加，pre是在队列最前面插入，post是在队列最后面插入。
+     pre方法表示矩阵前乘，例如：变换矩阵为A，原始矩阵为B，pre方法的含义即是A*B
+     post方法表示矩阵后乘，例如：变换矩阵为A，原始矩阵为B，post方法的含义即是B*A
+
+1.matrix.preScale(0.5f, 1);   
+2.matrix.preTranslate(10, 0);  
+3.matrix.postScale(0.7f, 1);    
+4.matrix.postTranslate(15, 0);  
+等价于：
+translate(10, 0) -> scale(0.5f, 1) -> scale(0.7f, 1) -> translate(15, 0)
+注意：后调用的pre操作先执行，而后调用的post操作则后执行。
+
+set方法一旦调用即会清空之前matrix中的所有变换，例如：
+1.matrix.preScale(0.5f, 1);   
+2.matrix.setScale(1, 0.6f);   
+3.matrix.postScale(0.7f, 1);   
+4.matrix.preTranslate(15, 0);  
+等价于
+translate(15, 0) -> scale(1, 0.6f) ->  scale(0.7f, 1)
+
+matrix.preScale (0.5f, 1)将不起作用。
+
+（二）映射方法
+
+    Matrix提供了mapXXX的方法，用于获取经matrix映射之后的值。主要有：mapPoints，mapRects，mapVectors等方法。
+    这些方法你会使用到：在你需要记住matrix操作之后的数值的时候。比如：记住矩形旋转34°（rotate）之后四个点的坐标。（你可以尝试着自己计算，你会发现很复杂，还不精确）
+
+需要注意的是，matrix的某些方法使用到中心点的时候，如果不设置，默认是以（0，0）为中心点的。
+
+记下来，以免忘记。
