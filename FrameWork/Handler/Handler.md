@@ -59,3 +59,141 @@ private static class InternalHandler extends Handler {
         }
 }
 ```
+
+
+## new Handler().obtainMessage().sendToTarget()过程分析
+
+new Handler().obtainMessage().sendToTarget()这句话用着真爽，一行代码就能搞定异步消息了！所以在代码中使用的算是非常频繁的了，那这又是一个什么样的过程呢？ 
+
+这个过程中又有什么玄机呢？ 这篇文章，我们来一步步的分析一下这三句话。
+
+### 1、new Handler()的分析
+
+new Handler()会辗转来到public Handler(Callback callback, boolean async)这个构造方法。
+
+在这个构造方法中会获取当前Looper： mLooper = Looper.myLooper();
+
+而此时的Looper是默认的那个Looper，即在ActivityThread的main方法中prepare的Looper
+
+在ActivityThread.main中：
+
+Looper.prepareMainLooper();
+...
+Looper.loop();
+
+此时Handler和Looper有了关联。
+
+### 2、obtainMessage()的分析
+
+在Handler.obtainMessage()中会调用Message.obtain(this)。
+Message.obtain()的源码：
+
+public static Message obtain(Handler h) {
+        Message m = obtain();
+        m.target = h;
+        return m;
+  }
+
+obtain从消息池中构造一个message，并将message的target置为传进来的handler。此时handler和message有了关联。
+
+sendToTarget()的分析
+
+public void sendToTarget() {
+        target.sendMessage(this);
+}
+
+直接调用target.sendMessage，而target正是当前的Handler。
+继续跟踪target.sendMessage(this) target中发送消息会辗转来到
+private boolean enqueueMessage(MessageQueue queue, Message msg, long uptimeMillis)
+在这个方法中有去调用queue.enqueueMessage.
+
+继续跟踪queue.enqueueMessage,这个方法有点长，主要是将当前Message压入消息队列中：
+
+```java
+...
+msg.when = when;
+Message p = mMessages;
+boolean needWake;
+if (p == null || when == 0 || when < p.when) {
+    // New head, wake up the event queue if blocked.
+    msg.next = p;
+    mMessages = msg;
+    needWake = mBlocked;
+} else {
+    // Inserted within the middle of the queue.  Usually we don't have to wake
+    // up the event queue unless there is a barrier at the head of the queue
+    // and the message is the earliest asynchronous message in the queue.
+    needWake = mBlocked && p.target == null && msg.isAsynchronous();
+    Message prev;
+    for (;;) {
+         prev = p;
+         p = p.next;
+         if (p == null || when < p.when) {
+                break;
+          }
+         if (needWake && p.isAsynchronous()) {
+               needWake = false;
+          }
+     }
+     msg.next = p; // invariant: p == prev.next
+     prev.next = msg;
+ }
+ 
+// We can assume mPtr != 0 because mQuitting is false.
+if (needWake) {
+     nativeWake(mPtr);
+}
+...
+
+```
+
+这里面的MessageQueue就是在Handler保存的那个MessageQueue，也就是说此时，
+这个Message已经保存到Handler中的那个消息队列中了。而，我们Handler中的MessageQueue哪来的呢？ 来看看这行代码：
+```java
+    public Handler(Callback callback, boolean async) {
+    ...
+    mLooper = Looper.myLooper();
+    ...
+    mQueue = mLooper.mQueue;
+    ...
+    }
+```
+
+
+
+Handler中的MessageQueue正式从Looper中获取的，这个Looper当然就是在ActivityThread中prepare的那个。
+
+
+顺一下此时的关系：Handler中保存了ActivityThread中的Looper，并从该Looper中获取了MessageQueue；调用obtainMessage，实质上是创建了一个Message对象，并将Message对象的target设置为现在的Handler；调用Message.sendToTarget()实际是调用了Message.target.sendMessage()，即Handler.sendMessage，而Handler.sendMessage会来到enqueueMessage方法，在这个方法中调用MessageQueue.enqueueMessage将消息压缩刚开始我们获取的那个MessageQueue。
+
+此时，再来看看Looper.loop()是怎么将消息回调到handleMessage中的：
+```java
+    for (;;) {
+            Message msg = queue.next(); // might block
+            ...
+            msg.target.dispatchMessage(msg);
+            ...
+            msg.recycle();
+     }
+```
+
+
+
+继续看看Handler.dispatchMessage():
+
+```java
+    public void dispatchMessage(Message msg) {
+            if (msg.callback != null) {
+                handleCallback(msg);
+            } else {
+                if (mCallback != null) {
+                    if (mCallback.handleMessage(msg)) {
+                        return;
+                    }
+                }
+                handleMessage(msg);
+            }
+    }
+```
+
+
